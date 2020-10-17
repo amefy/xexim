@@ -1,0 +1,8 @@
+name: 'xexim' 
+title: 'xexim' 
+description: 'application development platform' 
+tags: ['xexim','platform','application'] 
+author: 'Amefy' 
+version: '4.4.2' 
+excludeFiles: ['.DS_Store','.git','.gitignore']
+license: 'Apache License'

@@ -1,0 +1,34 @@
+
+export class Exception
+	message,code
+	init (message,code) ->
+		this.message = message
+		this.code = code
+
+	throwif (condition=yes) ->
+		throw this 		if condition
+
+	toString ->
+		<- message
+
+	getBackTrace ->
+		t = ''
+	
+		#unless @Error?
+		err=new Error().stack.split '\n'
+
+		for i in 5..<err.length
+			t+=err[i]+'\n'
+		#else			
+		#	t = @Error.stack
+
+		<- t
+
+global.ThrowE = (message,code,condition=yes) ->
+	<- (new Exception(message,code)).throwif condition
+
+global.RetError = (ce,message,code,condition=yes) ->
+	#console.info 'RetError in Exception.metab'
+	#console.info message	
+	ce new Exception(message,code)		if condition
+	

@@ -1,0 +1,47 @@
+Object.defineProperty Number::, "ShowPrettyBytes", {
+	'get': --->
+		if this.Value < 1024			# bytes
+			<- this.Value+'Bytes'
+		else this.Value < 1048576	# kbytes
+			<- (this.Value/1024).toFixed(2)+' kB'
+		else this.Value < 1073741824	# megabytes					
+			<- (this.Value/1048576).toFixed(2)+' MB'
+		else this.Value < 1099511627776	# gigabytes
+			<- (this.Value/1073741824).toFixed(2)+' GB'
+		else this.Value < 1099511627776	# gigabytes
+			<- (this.Value/1125899906842624).toFixed(2)+' TB'
+}
+
+Object.defineProperty Number::, "ShowPrettyTime", {
+	'get': --->
+		msec = this.Value
+		r = ''
+
+		if msec >= 86400000
+			days = parseInt(msec / 86400000)
+			msec -= days*86400000
+			r += days+'days '
+
+		if msec >= 3600000
+			hours = parseInt(msec / 3600000)
+			msec -= hours*3600000
+			r += hours+'hours '
+
+		if msec >= 60000
+			min = parseInt(msec / 60000)
+			msec -= min*60000
+			r += min+'min '
+
+		if msec >= 1000
+			sec = parseInt(msec / 1000)
+			msec -= sec*1000
+			r += sec+'sec '
+
+		r += msec+'msec' 	if msec > 0
+		<- r
+}
+
+Object.defineProperty Number::, "ToInt", {
+	'get': --->
+		<- parseInt this
+}

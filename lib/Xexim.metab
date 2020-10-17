@@ -1,0 +1,211 @@
+# Xexim
+# Author: Amefy
+# Copyright (c) 2016 Amefy under license Apache-2.0
+
+fs = require 'fs'
+cluster = require 'cluster'
+child_process = require 'child_process'
+
+import str from String		
+
+import Exception
+import Event
+import DataUtil
+
+export class Xexim : Event
+	version
+	versionAscii
+	log
+	
+	init ->		
+		global.FATAL = global.ERROR = global._FATAL = global._ERROR = console.error		
+		global.WARN = global._WARN = console.warn
+		global.INFO = global._INFO = console.info
+		global.L = global.LOG = global._LOG = global.DEBUG = global._DEBUG = global._TRACE = global.TRACE = console.log	
+		
+		import ConfigManagement
+
+		@ ConfigManagement.loadMainConfig()			
+		global.Config = ConfigManagement.config
+		
+
+		if Config.restartOnCrash and process.argv[2] isnt 'Start'	#Load other process for monitor crash
+			createMaster()
+			<-		
+
+		import Loader
+		import Util
+		@ new Util				
+
+
+		import obj from Object
+		import arr from Array	
+		import num from Number
+		import str from String		
+		import dat from Date
+
+		import Version
+
+		version = Version.version
+		versionAscii = Version.getVersionAscii()
+						
+		process.title = 'xexim '+version+' '+Config.appName
+
+		global.Xexim = this
+
+		if cluster.isMaster		
+			@DataUtil.mkdirRecursive 'tmp/trash'
+			@DataUtil.mkdirRecursive 'tmp/code_cache'
+			@DataUtil.mkdirRecursive 'modules'
+			@DataUtil.mkdirRecursive 'data'
+
+		#console.info '\n[ Xexim v#version  ]'
+		console.info '\n'+versionAscii
+
+		
+		#Log
+		import Log	
+		log = new Log		
+		@ log.open Config.log.file, Config.log.level, Config.log.split, Config.log.maxSplits
+
+		global.FATAL= (m) -> 				log.fatal m		
+		global.ERROR= (m) ->  				log.error m
+		global.WARN=  (m) ->  				log.warn m		
+		global.INFO = global.LOG = (m) ->  	log.info m
+		global.DEBUG= (m) ->  				log.debug m
+		global.TRACE= (m) ->  				log.trace m
+
+		
+		process.on 'SIGINT', ->
+			if emit({name:'eExit'})
+				INFO 'Got SIGINT. Shutting down'
+				setImmediate ->
+					setImmediate ->
+						process.exit 0
+										
+		process.on 'SIGTERM', ->
+			if emit({name:'eExit'})
+				INFO 'Got SIGTERM. Shutting down'
+				setImmediate ->
+					setImmediate ->
+						process.exit 0								
+
+		
+		process.on 'uncaughtException', (e) ->			
+			processException e
+
+		process.on 'unhandledRejection', (reason, p) ->
+			processException reason
+
+		startup(ConfigManagement).catch (err) ->			
+			@processException err
+
+	startup (configManagement) ->			
+		import 'Modules/ModulesManagement'		
+
+		@ ModulesManagement.startup()					
+
+		@ ModulesManagement.loadModulesConfig()		
+		global.Config = configManagement.config
+
+		DEBUG 'Loading modules...'
+		for module,name in Config.modules
+			if module.startup					
+				startupClass = (@ Metab.importFromFile Config.rootDir+'lib/Xexim.metab', "../#module.startup ").default
+				if startupClass.startup				
+					INFO '\t'+name
+					@ startupClass.startup() 	
+
+		DEBUG 'Running modules...'
+		for module,name in Config.modules					
+			if module.startup
+				startupClass = (@ Metab.importFromFile Config.rootDir+'lib/Xexim.metab', "../#module.startup ").default
+				if startupClass.run
+					INFO '\t'+name
+					@ startupClass.run() 					
+			
+		#Save pid
+		if cluster.isMaster
+			@ DataUtil.writeTextFile 'tmp/master.pid', (Config.restartOnCrash? process.argv[3] : process.pid)
+			#WARN 'Error writing PID: '+E 	if E
+
+			@ DataUtil.removeFolderContent 'tmp/trash'
+
+			#WARN 'Cannot remove trash files: '+E			
+
+			if Config.workers is 'auto'
+				processes = os.cpus().length
+			else 
+				processes = parseInt Config.workers
+
+			if processes > 0
+				INFO "Creating #processes  workers..."
+
+				cluster.on 'exit', (worker, code, signal) ->
+					WARN 'Worker '+worker.process.pid+' died'
+
+				cluster.on 'disconnect', (worker) ->
+					WARN 'Worker '+worker.process.pid+' disconnected'
+					setTimeout (->
+						INFO 'Creating new worker...'
+						cluster.fork()
+					), (Config.develop? 100 : 1000)
+
+				#Fork workers.
+				for i in 1..processes
+					cluster.fork()	
+		else
+			process.title += ' Worker '+process.pid												
+								
+		timeToStart = Date::.MeasureInterval
+		timeToStart.setTime StartTime.getTime()
+		timeToStart = timeToStart.measureToString()
+
+		if cluster.isMaster
+			console.info "Xexim started in #timeToStart \n"
+			INFO "Xexim started in #timeToStart \n\n\n\n\n"  
+		else
+			console.info "Xexim started from worker #process.pid  in #timeToStart \n"
+			INFO "Xexim started from worker #process.pid  in #timeToStart \n"	
+
+	processException (err) ->							
+		if err.stack			
+			#Excp = NewException 'Uncaughted Exception', L.Prototype.LEVEL_FATAL, 'UNCAUGHTED_EXCEPTION', E
+			#Trace = Excp.GetBackTraceWithCode()
+			ERROR err
+		else err.message			
+			ERROR 'Uncaughted Exception: '+err.message				
+		else			
+			ERROR 'Uncaughted Exception: ' +err		
+
+		console.error 'Uncaughted Exception, exiting...'		
+		console.error err
+		
+		restart 2		
+
+	
+	restart (code=1) ->
+		if emit({
+			name: 'eRestart'
+			data: 
+				code: code
+				cb: ->
+					process.exit code
+		})
+			process.exit code
+
+
+	createMaster ->
+		master = child_process.spawn process.argv[0],[process.argv[1],'Start',process.pid], {
+			detached: no
+			cwd: Config.rootDir
+			stdio: 'inherit'
+		}
+
+		process.title = 'xexim monitor for '+master.pid
+		master.on 'exit', (code) ->
+			if code isnt 0
+				console.error "Xexim exit with code "+code+", restarting xexim..." 		
+				createMaster()	
+
+export @ new Xexim

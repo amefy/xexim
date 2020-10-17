@@ -1,0 +1,15 @@
+appName: "Xexim"	
+develop: no
+workers: 0		# 0 for monoprocess, 'auto' for auto, n for n child process
+restartOnCrash: no
+userKey: null
+instanceId: null
+log:
+	file: "tmp/xexim.log"
+	level: "DEBUG"
+	split: 200		# Megabytes to split log file. Set 0 to disable split
+	maxSplits: 100	# remove old splits when there are many. Set 0 to disable
+cache:
+	cacheCode: yes
+	ttl: 86400
+modules: {}

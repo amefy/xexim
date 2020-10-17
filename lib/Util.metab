@@ -1,0 +1,201 @@
+crypto = require 'crypto'
+EventEmitter = require( "events" ).EventEmitter
+url = require 'url'
+
+export class Util
+	init ->			
+		global.ExecuteAtEndRecursive = setImmediate
+
+		import 'ConsoleLog'		
+
+		notInclude=['constructor','init']
+	
+		methods = Object.getOwnPropertyNames(this.constructor.prototype)
+		for k in methods		
+			unless k in notInclude
+				global[k]=this[k]
+
+	isFunction (d) ->
+		<- typeof d is "function"
+	isObject (d) ->
+		<- typeof d is "object"
+	isString (d) ->
+		<- typeof d is "string"
+	isNumber (d) ->
+		<- typeof d is "number"
+	isBoolean (d) ->
+		<- typeof d is "boolean"
+	isArray (d) ->
+		<- Array.isArray d
+	isDate (d) ->
+		<- d instanceof Date
+	Random (to) -> 	# integers from 1 to "to"
+		<- Math.floor Math.random() * to + 1
+	RandomColor ->
+		rint = Math.round(0xFFFFFF * Math.random())
+		<- ("\#0" + rint.toString(16)).replace new RegExp('^\#0([0-9A-F]{6})$','i'), "\#$1"
+
+	static _RandomChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+	RandomChars (size) ->
+		r = ''
+		for i in 0..<size
+			r += Util._RandomChars[global.Random(Util._RandomChars.length)-1]
+
+		<- r
+
+	PadZeroes (number, digits) ->
+		<- (Math.pow(10, digits) + parseInt(number)).toString().substring 1	
+
+	RetError (ce, m, c) ->
+		ce {code:c,message:m}
+
+	sprintf (s) ->
+		bits = s.split("%")
+		out = bits[0]
+		re = /^([ds])(.*)$/
+		i = 1
+		
+		while i < bits.length
+			p = re.exec(bits[i])
+			continue  if not p or not arguments[i]?
+			if p[1] is "d"
+				out += parseInt(arguments[i], 10)
+			else p[1] is "s"
+				out += arguments[i]
+			out += p[2]
+			i++
+		<- out
+
+	MD5 (s) ->
+		<- crypto.createHash('md5').update(s).digest("hex")
+
+	SHA1 (s) ->
+		<- crypto.createHash('sha1').update(s).digest("hex")
+
+	SHA256 (s) ->
+		<- crypto.createHash('sha256').update(s).digest("hex")
+
+	SHA512 (s) ->
+		<- crypto.createHash('sha512').update(s).digest("hex")
+
+	ExecuteAtEnd (cb) ->
+		process.nextTick cb
+
+	#call: foreachAsync Elements,cb,cend,cberror
+	#parameters cb function: (i,Index,Value,Elements,cbnext,cbend,ce)
+	foreachAsync (elements,cb,cend,cberror) ->
+		indexes=[]
+		for e,i in elements
+			indexes.push i
+		
+		nextele = (ii,index,els) ->
+			ii++
+			if ii<index.length
+				cb ii, index[ii], els[index[ii]], els, (->
+					nextele ii, index, els
+				), cend, cberror
+			else
+				cend()					
+		
+		nextele -1, indexes, elements
+
+	###CatchAsyncRes (Newcb,Newce,Obj,FunctionName) ->
+		F=Obj[FunctionName] 
+		
+		Obj[FunctionName]= (cb,ce) ->
+			NArg=[
+				(->
+					Newcb.apply global, arguments 		if isFunction(Newcb)
+					cb.apply global, arguments			if isFunction(cb)
+				), (->
+					Newce.apply global, arguments 		if isFunction(Newce)
+					ce.apply global, arguments 			if isFunction(ce) 
+				)
+			]
+			
+			for i in ( if isFunction(ce) then 2 else 1 )..arguments.length-1
+				NArg.push arguments[i]
+					
+			F.apply Obj, NArg
+	###
+
+	EmitError (m) ->
+		#ERROR m
+		(new EventEmitter()).emit "error", new Error(m)
+
+	#WaitAsync: (Trigger) ->
+	#	deasync.loopWhile Trigger			
+
+	TryAsync (code,cat) -->
+		code().then(cb).catch (e) ->
+			cat(e).then(cb).catch(ce)
+
+
+	AjaxRequest (method,Url,data,headers) -->
+		urlParts = url.parse Url
+		http = urlParts.protocol is 'https:'? (require 'https') : (require 'http')
+
+		Params= ''
+
+		if method is 'GET' and data
+			if global.isString(data)
+				Params = '?'+data
+			else
+				Params +='?'
+				i = 0
+				for V,K in data
+					Params +='&' 	if i > 0
+					Params +=encodeURIComponent(K)+'='+encodeURIComponent(V)
+					i++			
+
+		unless urlParts.port?
+			if urlParts.protocol is 'https:' 
+				urlParts.port = '443' 
+			else 
+				urlParts.port = '80' 
+		urlParts.method = method
+		urlParts.path += Params
+		urlParts.headers = {}
+
+		if headers?
+			for V,K in headers
+				urlParts.headers[K] = V
+
+		if method is 'POST'
+			dataToSend= ''
+
+			if data
+				if global.isString(data)
+					dataToSend = Buffer.from(data, 'utf-8')
+				else
+					urlParts.headers["Content-type"] = "application/x-www-form-urlencoded"
+
+					i = 0
+					for V,K in data
+						dataToSend +='&' 	if i > 0
+						dataToSend +=encodeURIComponent(K)+'='+encodeURIComponent(V)
+						i++
+
+			urlParts.headers["Content-length"] = dataToSend.length
+
+		req = http.request urlParts, (res) ->
+			data = ''
+			res.setEncoding 'utf8'
+			res.on 'data', (chunk) ->
+				data += chunk
+			res.on 'end', ->
+				
+				if res.statusCode is 200
+					cb data
+				else
+					ce {
+						code: res.statusCode
+						message: data
+					}
+						
+		req.on 'error', (e) ->			
+			ce e.message		
+
+		req.write dataToSend 	if method is 'POST'		
+		req.end()
+

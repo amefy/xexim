@@ -1,0 +1,269 @@
+path = require 'path'
+util = require 'util'
+zlib = require 'zlib'
+fs = require 'fs'
+
+import 'Event'
+import 'DataUtil'
+
+export class Log : Event
+	const CHECK_SIZE_INTERVAL = 0.2 	# in minutes
+	enum LEVELS FATAL,ERROR,WARN,INFO,DEBUG,TRACE
+					
+	level = LEVELS.INFO
+	file
+	ready = no	
+
+	filename
+
+	#bytesToSplit
+	split
+	maxSplits
+	spliting = no
+
+	onCloseBind
+	logg
+
+	open (filename,lvl,split,maxSplits,colorize=yes) ->
+		level = getLevelNumber lvl
+
+		this.filename = filename
+		this.split = split * 1024 * 1024
+		this.maxSplits = maxSplits
+
+		@ openFile filename
+
+		#TODO: execute only in master
+		if split isnt 0
+			setInterval checkSize.bind(this), 1000 * 60 * CHECK_SIZE_INTERVAL
+		
+		ready = yes
+
+		if colorize
+			logg = loggColor
+		else
+			logg = loggNoColor
+						
+		info '\n\n'+Xexim.versionAscii			if filename is Config.log.file
+
+		Xexim.on 'eRestart', (e) ->
+			#close and flush
+			ready = no			
+			file.on 'finish', ->
+				e.data.cb()
+			file.end()
+
+			<- no
+
+	getLevelNumber (lvl) ->
+		switch lvl	
+			case 'FATAL'
+				<- LEVELS.FATAL
+			case 'ERROR'
+				<- LEVELS.ERROR
+			case 'WARN'
+				<- LEVELS.WARN
+			case 'INFO'
+				<- LEVELS.INFO
+			case 'DEBUG'
+				<- LEVELS.DEBUG
+			case 'TRACE'
+				<- LEVELS.TRACE
+			default
+				<- LEVELS.TRACE
+
+	onClose ->
+		if ready
+			_INFO "Log file closed "
+			ThrowE 'Log file closed', 'LOG_CLOSED'
+
+	trace (m) ->
+		logg m, 'TRACE' 	if LEVELS.TRACE <= level
+	debug (m) ->
+		logg m, 'DEBUG' 	if LEVELS.DEBUG <= level
+	info (m) ->
+		logg m, 'INFO ' 	if LEVELS.INFO <= level
+	warn (m) ->
+		logg m, 'WARN ' 	if LEVELS.WARN <= level
+	error (m) ->
+		logg m, 'ERROR' 	if LEVELS.ERROR <= level
+	fatal (m) ->
+		logg m, 'FATAL' 	if LEVELS.FATAL <= level
+
+	###RetInfo: (callerror, m, c) ->
+		@Ret 'INFO', callerror, m, c		if 4<=@level
+	RetWarn: (callerror, m, c) ->
+		@Ret 'WARN', callerror, m, c		if 3<=@level
+	RetError: (callerror, m, c) ->
+		@Ret 'ERROR', callerror, m, c		if 2<=@level
+	RetFatal: (callerror, m, c) ->
+		@Ret 'FATAL', callerror, m, c		if 1<=@level
+
+	Ret: (level, callerror, m, c) ->
+		@Logg m, level
+		
+
+		Excp = NewException m, level, c
+		@Logg Excp.GetBackTraceWithCode(4), level
+		
+			
+		s=
+			Code: c
+			Message: m
+			
+		callerror s 	if isFunction callerror		
+
+		s	
+	###
+	
+	loggNoColor (m, level) ->			
+		s = ''
+		s = timeStamp()+(Config.processes isnt 0 ? '' : process.pid+'-')
+
+		if isString(m)			
+			s += "#level[0]  #m "
+		else
+			s += level[0] + ' ' + util.inspect m, {colors:no}
+
+		emit {
+			name: 'eLog'
+			data: s+"\n"
+		}
+
+		#fileWrite s+'\n'
+		if ready
+			file.write s+'\n'
+
+	loggColor (m, level) ->			
+		s = "\u001b[1m"+"\u001b[37m"
+
+		switch level
+			case 'ERROR','FATAL'
+				s += "\u001b[41m"
+			case 'WARN '
+				s += "\u001b[43m"	
+
+		s += timeStamp()+(Config.processes isnt 0 ? '' : process.pid+'-')+'\u001b[0m'
+
+		if isString(m)			
+			if level is 'TRACE'	
+				s += "\u001b[90m#level[0]  #m "
+			else level is 'DEBUG'
+				s += "\u001b[37m#level[0]  #m "
+			else
+				s += "#level[0]  #m "
+		else
+			s += level[0] + ' ' + util.inspect m, {colors:yes}
+
+		emit {
+			name: 'eLog'
+			data: s+"\n"
+		}
+
+		#fileWrite s+'\n'
+		if ready
+			file.write s+'\n'
+
+	###fileWrite (s) ->
+		if split > 0
+			bytesToSplit -= s.length	
+
+			if bytesToSplit <= 0
+				splitFile()
+
+		console.log bytesToSplit
+		if ready
+			file.write s
+	###
+
+	splitFile ->
+		TRACE 'split log file...'
+		spliting = yes
+		oldFile = file
+
+		files = @ DataUtil.getFiles path.dirname filename
+
+		minSplit = 0
+		maxSplit = 0
+		numSplits = 0
+		base = path.basename filename
+
+		for f in files
+			if f.name.StartsWith base+'.split'
+				numSplits++
+				number = parseInt(f.name.substr((base+'.split').length))
+				maxSplit = number	if number > maxSplit
+				minSplit = number	if number < minSplit or minSplit is 0
+				
+		splitName = filename+'.split'+(maxSplit+1)
+		#console.log splitName
+		oldonCloseBind = onCloseBind
+		oldFile.removeListener 'close', oldonCloseBind
+
+		tempName = filename + (new Date()).getTime()
+		@ DataUtil.renameFile filename, tempName
+
+		@ openFile filename
+		
+		oldFile.end()
+
+		@ compressSplit tempName, splitName
+
+		#remove old splits
+		if maxSplits isnt 0
+			while numSplits > maxSplits
+				f = filename+'.split'+minSplit
+				DataUtil.removeFile(f).catch (e) ->
+					WARN e
+				minSplit++
+				numSplits--
+
+		spliting = no
+
+	openFile (name) ->
+		file = @ createWriteStream name, {flags:'a'}
+
+		file.on 'error', (e) ->
+			_ERROR "Log file error: #e "
+			ThrowE e
+		
+		onCloseBind = onClose.bind(this)
+		file.on 'close', onCloseBind
+
+	createWriteStream (file,options) -->		
+		cb fs.createWriteStream (file.StartsWith("/")? file : Config.rootDir+file), options
+
+	compressSplit (tempName,splitName) ->
+		gzip = zlib.createGzip()
+		reader = @ DataUtil.createReadStream tempName
+		writer = @ DataUtil.createWriteStream splitName
+		reader.pipe(gzip)
+		@ DataUtil.pipeStreamToStream gzip, writer
+		@ DataUtil.removeFile(tempName)
+
+	checkSize ->
+		DataUtil.stat(filename).then (stats) ->
+			if stats.size > split and not spliting
+				splitFile()
+
+	###calcBytesToSplit ->
+		if split > 0
+			bytesToSplit = split * 1024 * 1024
+
+			try
+				bytesToSplit -= (@ DataUtil.stat filename).size
+			catch e
+				# no log
+	###
+
+	timeStamp ->
+		T=new Date()
+	
+		M=T.getMonth()+1
+		D=T.getDate()
+		H=T.getHours()
+		m=T.getMinutes()
+		S=T.getSeconds()
+		s=T.getMilliseconds()
+		
+		<- "[#T.getFullYear() /#{ (M<10? '0'+M : M) }/#{ (D<10? '0'+D : D) } #{ (H<10? '0'+H : H) }:#{ (m<10? '0'+m : m) }:#{ (S<10? '0'+S : S) },#{ (s<100? (s<10? '00'+s : '0'+s) : s) }]-"

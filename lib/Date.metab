@@ -1,0 +1,168 @@
+Object.defineProperty Date::, "AddDays", {
+	value: (days) --->
+		V = this.valueOf()
+		V += 86400000 * days
+		this.setTime V		
+		<- this
+}
+
+Object.defineProperty Date::, "AddSeconds", {
+	value: (sec) --->
+		V = this.valueOf()
+		V += 1000 * sec
+		this.setTime V
+		<- this
+}
+
+Object.defineProperty Date::, "AddMinutes", {
+	value: (min) --->
+		V = this.valueOf()
+		V += 60000 * min
+		this.setTime V
+		<- this
+}
+
+Object.defineProperty Date::, "AddHours", {
+	value: (hours) --->
+		V = this.valueOf()
+		V += 3600000 * hours
+		this.setTime V
+		<- this
+}
+
+Object.defineProperty Date::, "AddMonths", {
+	value: (months) --->
+		V = this.getDate()
+		this.setDate 1
+		this.setMonth this.getMonth() + months
+		this.setDate Math.min V, this.DaysInMonth
+		<- this
+}
+
+Object.defineProperty Date::, "AddYears", {
+	value: (years) --->
+		V = this.getDate()
+		this.setDate 1
+		this.setYear this.getYear() + years		
+		<- this
+}
+
+Object.defineProperty Date::, "DaysInMonth", {
+	'get': --->
+		<- [31, ( (((this.getFullYear() % 4 is 0) and (this.getFullYear() % 100 isnt 0)) or (this.getFullYear() % 400 is 0))? 29 : 28), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][this.getMonth()]
+}
+		
+
+Object.defineProperty Date::, "TimeStamp", {
+	'get': --->
+		T=new Date()
+	
+		M=T.getMonth()+1
+		D=T.getDate()
+		H=T.getHours()
+		m=T.getMinutes()
+		S=T.getSeconds()
+		s=T.getMilliseconds()
+		
+		<- "#T.getFullYear() /#{ (M<10? '0'+M : M) }/#{ (D<10? '0'+D : D) } #{ (H<10? '0'+H : H) }:#{ (m<10? '0'+m : m) }:#{ (S<10? '0'+S : S) },#{ (s<100? (s<10? '00'+s : '0'+s) : s) }"
+}		
+
+Object.defineProperty Date::, "MeasureInterval", {
+	'get': --->
+		d1 = new Date()
+
+		d1.measure = ->
+			<- (new Date()) - d1
+		d1.measureToString = ->
+			timeS = d1.measure()
+
+			r = ''
+
+			if timeS >= 3600000
+				hours = parseInt(timeS / 3600000)
+				timeS -= hours*3600000
+				r += hours+'hours '
+
+			if timeS >= 60000
+				min = parseInt(timeS / 60000)
+				timeS -= min*60000
+				r += min+'min '
+
+			if timeS >= 1000
+				sec = parseInt(timeS / 1000)
+				timeS -= sec*1000
+				r += sec+'sec '
+
+			r += timeS+'msec'
+			<- r
+		<- d1
+}
+
+Object.defineProperty Date::, "GenerateDates", {
+	value: (startDate, endDate) --->
+		NStartDate = new Date(startDate.getTime())
+		result = []
+		while NStartDate < endDate
+			result.push NStartDate.getFullYear() + "-" + PadZeroes(NStartDate.getMonth() + 1, 2) + "-" + PadZeroes(NStartDate.getDate(), 2)
+			NStartDate.setDate NStartDate.getDate() + 1
+		<- result		
+}
+
+
+Object.defineProperty Date::, "ConvertToTimeZone",	{#convert current date to other that in current local time show other timezone
+	value: (timeZone) --->	#time desviation in format (float) hour.minutes
+		Hours = Math.floor(timeZone)
+		Minutes = (timeZone-Hours)*100
+		this.setTime this.getTime()+(this.getTimezoneOffset()+Hours*60+Minutes)*60000
+}
+
+Object.defineProperty Date::, "ToDateFormat", {
+	value: (format) --->		#From example date 1945/02/09 08:05:07 use: YYYY 
+		# YYYY: 1945;   YY: 45							
+		# M: 2;   MM: 02;   MMM: Feb;   MMMM: Febrary
+		# D: 9;   DD: 09;	DDD: Mon;	DDDD: Monday							
+		# H: 8;   HH: 08							
+		# m: 5;   mm: 05							
+		# s: 7;   ss: 07
+
+		ReplaceRec = (F,S,R,I) ->
+			Split = F.split(S)
+			for v,k in Split
+				Split[k] = I(v)
+
+			<- Split.join(R)
+
+		<- ReplaceRec format,'YYYY',this.getFullYear(),((s)->			
+			<- ReplaceRec s,'YY',this.getYear(),((s2)->
+				<- ReplaceRec s2,'MMMM',this.toLocaleString('en-US', {month: "long"}),((s3)->
+					<- ReplaceRec s3,'MMM',this.toLocaleString('en-US', { month: "short" }).replace('.',''),((s4)->
+						<- ReplaceRec s4,'MM',this.toLocaleString('en-US', { month: "2-digit" }),((s5)->
+							<- ReplaceRec s5,'M',this.getMonth()+1,((s6)->
+								<- ReplaceRec s6,'DDDD',this.toLocaleString('en-US', { weekday: "long" }),((s7)->
+									<- ReplaceRec s7,'DDD',this.toLocaleString('en-US', {weekday: "short"}).replace('.',''),((s8)->
+										<- ReplaceRec s8,'DD',this.toLocaleString('en-US', { day: "2-digit" }),((s9)->
+											<- ReplaceRec s9,'D',this.getDate(),((s10)->
+												<- ReplaceRec s10,'HH',PadZeroes(this.getHours(),2),((s11)->
+													<- ReplaceRec s11,'H',this.getHours(),((s12)->
+														<- ReplaceRec s12,'mm',PadZeroes(this.getMinutes(),2),((s13)->
+															<- ReplaceRec s13,'m',this.getMinutes(),((s14)->
+																<- ReplaceRec s14,'ss',PadZeroes(this.getSeconds(),2),((s15)->
+																	<- ReplaceRec s15,'s',this.getSeconds(),((s16)->
+																		<- s16
+																	)
+																)
+															)
+														)
+													)
+												)
+											)
+										)
+									)
+								)
+							)
+						)
+					)
+				)
+			)
+		)		
+}

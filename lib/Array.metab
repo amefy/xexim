@@ -1,0 +1,50 @@
+Object.defineProperty Array::, "PushUnique", {
+	value: (e) --->
+		this.push e unless e in this
+		<- this
+}
+
+Object.defineProperty Array::, "RemoveItem", {
+	value: (e) --->
+		i = this.indexOf e
+		this.splice i, 1
+		<- this
+}
+
+Object.defineProperty Array::, "First", {
+	'get': --->
+		<- this[0]
+	'set': (v)--->
+		this[0] = v
+}
+
+Object.defineProperty Array::, "Last", {
+	'get': --->
+		if this.length > 0
+			<- this[this.length - 1]
+		else
+			<- undefined
+	'set': (v)--->
+		this[this.length - 1] = v 		if this.length > 0
+}
+		
+Object.defineProperty Array::, "IsEmpty", {
+	'get': --->
+		<- this.length is 0
+}
+
+Object.defineProperty Array::, 'Merge', {
+	value: (obj) --->
+		for v in obj
+			this.push v
+		
+		<- this
+}
+
+Object.defineProperty Array::, "ConcatUnique", {
+	value: (arr) --->
+		for v in arr
+			this.push v 	unless v in this
+		
+		<- this		
+}

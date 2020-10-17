@@ -1,0 +1,74 @@
+export class Event 
+	events = {}	
+	destructed = no
+
+	on (event, param, cb) ->
+		unless cb?
+			cb = param
+			param = undefined
+		events[event] = [] unless events[event]?
+		
+		if param?
+			events[event].push [ cb, param ]
+		else
+			events[event].push cb
+
+	off (event, cb) ->
+		if events[event]?
+			listeners = events[event]
+			unless cb?
+				events[event] = []
+			else
+				for i in (listeners.length-1)..0
+					if listeners[i][0] is cb
+						listeners.splice i, 1
+						<- yes
+		else
+			events=[]	#remove all
+
+		<- no
+
+	once (event, param, cb) ->
+		unless cb?
+			cb = param
+			param = undefined
+		events[event] = [] 	unless events[event]?
+		
+		if param?
+			events[event].push [yes, cb, param ]
+		else
+			events[event].push [yes,cb]
+
+	emit (event) ->
+		event = {name:event}		if isString(event)
+
+		if events[event.name]
+			listeners=events[event.name]
+			len= listeners.length
+			event.from=this
+			while len--				
+				if isFunction(listeners[len])
+					res = listeners[len] event
+				else
+					if isBoolean(listeners[len][0])
+						event.param = listeners[len][2]
+						res = listeners[len][1] event
+						listeners.splice len, 1
+					else
+						event.param = listeners[len][1]
+						res = listeners[len][0] event
+				<- no 	if res is no
+		<- yes
+
+	destroy ->
+		emit 'eDestroy'
+
+	reemit ->
+		<- (e) ->
+			<- 	if destructed
+			<- emit {
+				name: e.name
+				data: e.data
+				from: e.from
+				param: e.param
+			}

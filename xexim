@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+// Xexim
+// Author: Amefy
+// Copyright (c) 2016 Amefy under license Apache-2.0
+
+global.StartTime = new Date();
+global.Config = {"rootDir":process.argv[1].substr(0,process.argv[1].length-5)}
+
+require('./lib/Metab/Metab');
+
+if(process.argv.length>2 && process.argv[2] != 'Start')	
+	Metab.Import('./lib/XeximCommands',()=>{},(e)=>{
+		console.info('FATAL ERROR');
+		console.info(e);
+	});	
+else
+	Metab.Import('./lib/Xexim',()=>{},(e)=>{
+		console.info('FATAL ERROR');
+		console.info(e);
+	});

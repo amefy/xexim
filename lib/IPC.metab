@@ -1,0 +1,162 @@
+import 'Event'
+cluster = require 'cluster'
+
+#Inter proccess communication
+class IPC : Event
+	static nextId = 0
+
+	requests = {}
+
+	init ->
+
+		if cluster.isMaster
+			cluster.on 'fork', (worker) ->
+				requests[worker.process.pid] = {}
+
+				worker.on 'message', (m) ->
+					if Array.isArray(m) and m[0]? and m[1]
+						onMessageFromWorker worker, m[0], m[1], m[2], m[3]
+					else
+						ERROR 'badly formed message from Worker process('+worker.process.pid+'): '+m
+		else
+			process.on 'message', (m) ->
+				if Array.isArray(m) and m[0]? and m[1]
+					onMessageFromMaster m[0], m[1], m[2], m[3]
+				else
+					ERROR 'badly formed message from Master process: '+m
+
+	onMessageFromWorker (worker,id,module,message,type) ->
+		TRACE 'onMessageFromWorker: '+worker.process.pid+' '+id+' '+module+' '+message.Json
+
+		if requests[worker.process.pid][id]?
+			r = requests[worker.process.pid][id]
+			delete requests[worker.process.pid][id]
+
+			if type is 'cb' and isFunction(r.cb)
+				r.cb(message)
+			else if type is 'ce' and isFunction(r.ce)
+				r.ce(message)
+		else
+			emit {
+				name: module
+				data: 
+					id: id
+					message: message
+					worker: worker
+					cbResponse: (messageRes) ->						
+						m = [id,module,messageRes,'cb']
+
+						TRACE 'responseToWorker: '+worker.process.pid+' '+id+' '+module+' '+m.Json
+						cluster.workers[worker.id].send(m)
+					ceResponse: (messageRes) ->
+						
+						m = [id,module,messageRes,'ce']
+
+						TRACE 'errorResponseToWorker: '+worker.process.pid+' '+id+' '+module+' '+m.Json
+						cluster.workers[worker.id].send(m)
+			}
+
+	onMessageFromMaster (id,module,message,type) ->
+		if requests[id]?
+			r = requests[id]
+			delete requests[id]
+			if type is 'cb' and isFunction(r.cb)
+				r.cb(message)
+			else if type is 'ce' and isFunction(r.ce)
+				r.ce(message)
+		else
+			emit {
+				name: module
+				data: 
+					id: id
+					message: message
+					cbResponse: (messageRes) ->
+						
+						m = [id,module,messageRes,'cb']
+
+						TRACE 'responseToMaster: '+id+' '+module+' '+m.Json
+						process.send(m)
+					ceResponse: (messageRes) ->
+						
+						m = [id,module,messageRes,'ce']
+
+						TRACE 'errorResponseToMaster: '+id+' '+module+' '+m.Json
+						process.send(m)
+			}
+
+
+	sendToMaster (module,message) -->
+		if cluster.isWorker
+			unless message?
+				m = [IPC.nextId,module]
+			else
+				m = [IPC.nextId,module,message]				
+
+			TRACE 'sendToMaster: '+module+' '+m.Json
+			process.send(m)
+
+			IPC.nextId++
+		cb()
+
+	requestToMaster (module,message) -->
+		if cluster.isWorker
+			unless message?
+				m = [IPC.nextId,module]
+			else
+				m = [IPC.nextId,module,message]		
+
+			requests[IPC.nextId] =
+				timeStamp: new Date
+				cb: cb
+				ce: ce				
+
+			TRACE 'requestToMaster: '+IPC.nextId+' '+module+' '+message.Json
+			process.send(m)
+
+			IPC.nextId++
+
+	sendToAllWorkers (module,message) -->
+		if cluster.isMaster
+			for w in cluster.workers
+				unless message?
+					m = [IPC.nextId,module]
+				else
+					m = [IPC.nextId,module,message]		
+
+				TRACE 'sendToWorker: '+w.process.pid+' '+module+' '+m.Json
+				w.send(m)
+
+				IPC.nextId++
+		cb()
+	
+	sendToWorker (worker,module,message) -->
+		if cluster.isMaster
+			if isFunction(message)
+				m = [IPC.nextId,module]
+			else
+				m = [IPC.nextId,module,message]			
+
+			TRACE 'sendToWorker: '+worker.process.pid+' '+module+' '+m.Json
+			cluster.workers[worker.id].send(m)
+
+			IPC.nextId++
+		cb()
+
+	requestToWorker (worker,module,message) -->
+		if cluster.isMaster
+			unless message?
+				m = [IPC.nextId,module]
+			else
+				m = [IPC.nextId,module,message]		
+
+			requests[worker.process.pid][IPC.nextId] =
+				timeStamp: new Date
+				cb: cb
+				ce: ce				
+
+			TRACE 'requestToWorker: '+worker.process.pid+' '+module+' '+m.Json
+			cluster.workers[worker.id].send(m)
+
+			IPC.nextId++
+			
+export new IPC

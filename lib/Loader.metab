@@ -1,0 +1,118 @@
+path = require 'path'
+fs = require 'fs'
+import 'DataUtil'
+
+export class Loader
+	#LastRequirePaths = {}
+	#SearchPaths = []
+	originalLoadAndCompileFile
+	originalLoadAndCompileFileSync	
+	originalConvertCodePosition
+
+	init ->		
+		unless Config.develop
+			Metab.defaultOptions = ->
+				<- {externalMaps:yes,cache:yes,comments:no}
+
+		if Config.cache.cacheCode
+			originalLoadAndCompileFile = Metab.loadAndCompileFile
+			Metab.loadAndCompileFile = (file, cb, ce, options) ->
+				loadAndCompileFile(file,options).then(cb).catch(ce)
+
+			originalLoadAndCompileFileSync = Metab.loadAndCompileFileSync
+			Metab.loadAndCompileFileSync = (file, cb, ce, options) ->
+				<- loadAndCompileFileSync(file,options)
+
+			originalConvertCodePosition = Metab.convertCodePosition
+			Metab.convertCodePosition = (file,line,col) ->
+				<- convertCodePosition file, line, col
+
+	loadAndCompileFile (file,options) ->
+		fileRelative = file.substr(Config.rootDir.length)
+		tag = @ getTag fileRelative
+		cache = "tmp/code_cache/#fileRelative #tag "+(Config.develop? 'dev':'')
+		
+		if @ DataUtil.fileExist cache				
+			<- @ DataUtil.readTextFile cache
+		else			
+			code = @ loadWithoutCache file, options
+			@ DataUtil.mkdirRecursive path.dirname cache
+			@ DataUtil.writeTextFile cache, code
+			<- code
+
+	loadAndCompileFileSync (file,options) ->
+		fileRelative = file.substr(Config.rootDir.length)
+		tag = getTagSync fileRelative
+		cache = "tmp/code_cache/#fileRelative #tag "+(Config.develop? 'dev':'')
+		
+		if fileExistSync cache				
+			<- readTextFileSync cache
+		else			
+			code = loadWithoutCacheSync file, options
+			mkdirRecursiveSync path.dirname cache
+			writeTextFileSync cache, code
+			<- code
+
+	convertCodePosition (file,line,col) ->		
+		try
+			unless Metab.sourceMaps[file]		#if loaded from cache, load normal
+				Metab.loadAndCompileFileSync file
+		catch e
+			ERROR e
+
+		<- originalConvertCodePosition file, line, col
+		
+			
+	loadWithoutCache (file,options) -->
+		originalLoadAndCompileFile file, cb, ce, options
+
+	loadWithoutCacheSync (file,options) -->
+		originalLoadAndCompileFileSync file, options
+
+	getTag (file) ->
+		try
+			stats = @ DataUtil.stat file
+		catch e
+			<- null
+
+		<- [stats.ino, stats.size, Date.parse(stats.mtime)].join 'a'
+
+	getTagSync (file) ->
+		try
+			stats = fs.statSync Config.rootDir+file
+		catch e
+			<- null
+
+		<- [stats.ino, stats.size, Date.parse(stats.mtime)].join 'a'
+
+	fileExistSync (file) ->
+		stats = fs.statSync Config.rootDir+file
+
+		if stats is null
+			<- no
+		else stats.isFile()
+			<- yes
+		else
+			<- no
+
+	readTextFileSync (file) ->
+		<- fs.readFileSync Config.rootDir+file, 'utf8'
+
+	mkdirRecursiveSync (folder) ->
+		stats = fs.statSync Config.rootDir+folder
+
+		if not stats.isDirectory()
+			
+			try
+				fs.mkdirSync Config.rootDir+folder
+			catch err
+				if err.code is 'ENOENT'
+					mkdirRecursiveSync(path.dirname(dir))
+					mkdirRecursiveSync(dir)			
+				else
+					throw err
+
+	writeTextFileSync (file,data) ->
+		fs.writeFileSync Config.rootDir+file, data
+
+export default new Loader

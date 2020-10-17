@@ -1,0 +1,9 @@
+config
+data
+modules
+tmp
+packages
+bin
+resources
+.DS_Store
+tests

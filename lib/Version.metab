@@ -1,0 +1,116 @@
+export class Version
+	const version = '4.4.2'
+
+
+
+	const xeximChar = [
+		'██    ██  █████  ██    ██  █  ██    ██   '
+		'  █  █    █        █  █       █ █  █ █   '
+		'   ██     ███       ██     █  █  ██  █   '
+		'  █  █    █        █  █    █  █      █   '
+		'██    ██  █████  ██    ██  █  █      █   '
+	]
+
+
+	const numbersChar = [
+		[
+			'███ '
+			'█ █ '
+			'█ █ '
+			'█ █ '
+			'███ '
+		],
+		[
+			' ██ '
+			'█ █ '
+			'  █ '
+			'  █ '
+			'  █ '
+		],
+		[
+			'███ '
+			'  █ '
+			' █  '
+			'█   '
+			'███ '
+		],
+		[
+			'███ '
+			'  █ '
+			' ██ '
+			'  █ '
+			'███ '
+		],
+		[
+			'█ █  '
+			'█ █  '
+			'████ '
+			'  █  '
+			'  █  '
+		],
+		[
+			'███ '
+			'█   '
+			'███ '
+			'  █ '
+			'███ '
+		],
+		[
+			'  █ '
+			' █  '
+			'███ '
+			'█ █ '
+			'███ '
+		],
+		[
+			'███ '
+			'  █ '
+			' ██ '
+			'  █ '
+			'  █ '
+		],
+		[
+			'███ '
+			'█ █ '
+			'███ '
+			'█ █ '
+			'███ '
+		],
+		[
+			'███ '
+			'█ █ '
+			'███ '
+			'  █ '
+			'  █ '
+		]		
+	]
+
+	const dotChar = [
+		'  '
+		'  '
+		'  '
+		'  '
+		'█ '
+	]
+
+	static getVersionAscii ->
+		res = []
+		for line in xeximChar
+			res.push line
+
+		for char in version
+			if char is '.'
+				for line,n in dotChar
+					res[n] += line				
+			else
+				number = numbersChar[parseInt(char)]
+
+				for line,n in number
+					res[n] += line
+
+				<- xeximChar.join('\n') + 'v' + version 		unless number?
+
+		<- res.join '\n'
+
+
+

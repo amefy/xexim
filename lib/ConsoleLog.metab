@@ -1,0 +1,65 @@
+util = require 'util'
+
+export class ConsoleLog
+	enum LEVELS FATAL,ERROR,WARN,INFO,DEBUG,TRACE
+					
+	init ->		
+		#Set custom ansi colors
+		util.inspect.styles.string = 'magenta'
+		util.inspect.styles.date = 'yellow'	
+
+		unless _FATAL?
+			global._FATAL= (m) -> fatal m
+			global._ERROR= (m) -> error m
+			global._WARN= (m) -> warn m
+			global._INFO= (m) -> info m
+			global._LOG = (m) -> info m
+			global._L = (m) -> info m
+			global._DEBUG= (m) -> info m
+			global._TRACE= (m) -> trace m		
+
+	trace (m) ->
+		logToConsole m, 'TRACE', console.trace
+
+	info (m) ->	
+		logToConsole m, 'INFO', console.info		
+
+	warn (m) ->
+		logToConsole m, 'WARN', console.warn
+
+	error (m) ->
+		logToConsole m, 'ERROR', console.error
+
+	fatal (m) ->
+		logToConsole m, 'ERROR', console.error
+
+	logToConsole (m, level, func) ->		
+		caller_line = ErrorObject.stack.split("\n")[6]
+		index = caller_line.indexOf "at "
+		clean = caller_line.slice index+2, caller_line.length
+
+		func "\u001b[1m"+"\u001b[37m" + timeStamp()+level[0]+"  "+"\u001b[0m"+clean
+		
+		if isString(m)			
+			func "\u001b[35m" + m
+		else
+			func util.inspect m, {colors:yes}
+
+	timeStamp ->
+		T=new Date()
+	
+		M=T.getMonth()+1
+		D=T.getDate()
+		H=T.getHours()
+		m=T.getMinutes()
+		S=T.getSeconds()
+		s=T.getMilliseconds()
+		
+		<- "[#T.getFullYear() /#{ (M<10? '0'+M : M) }/#{ (D<10? '0'+D : D) } #{ (H<10? '0'+H : H) }:#{ (m<10? '0'+m : m) }:#{ (S<10? '0'+S : S) },#{ (s<100? (s<10? '00'+s : '0'+s) : s) }]-"		
+		#<- "["+T.getFullYear()+"/"+(if M<10 then "0"+M else M)+"/"+(if D<10 then "0"+D else D)+" "+(if H<10 then "0"+H else H)+":"+(if m<10 then "0"+m else m)+":"+(if S<10 then "0"+S else S)+","+(if s<100 then (if s<10 then "00"+s else "0"+s) else s)+"]-"
+
+	get errorObject ->
+		try
+			throw Error ''
+		catch err
+			<- err

@@ -1,0 +1,121 @@
+crypto = require('crypto')
+
+Object.defineProperty String::, "ReplaceAll", {
+	value: (s, n) --->
+		if isArray(s)	# [s1,s2, ...] by n 
+			h=this
+			for val in s
+				h=h.replace new RegExp(val, "g"), n
+			<- h
+		else isObject(s)	# {s1:n1,s2:n2, ...}
+			h=this
+			for val in s
+				h=h.replace new RegExp(val, "g"), val
+			<- h
+		else				# s by n
+			<- this.replace new RegExp(s, "g"), n
+}
+
+Object.defineProperty String::, "CountOf", {
+	value: (s) --->
+		m = this.match(new RegExp(s.toString().replace(/(?=[.\\+*?[^\]$(){}\|])/g, "\\"), "g"))
+		<- m.length if m?
+		
+		<- 0
+}
+
+Object.defineProperty String::, "First", {
+	'get': --->
+		<- this[0]
+	'set': (v)--->
+		this[0] = v
+}
+
+Object.defineProperty String::, "Last", {
+	'get': --->
+		if this.length > 0
+			<- this[this.length - 1]
+		else
+			<- undefined
+	'set': (v)--->
+		this[this.length - 1] = v 	if this.length > 0
+}
+
+Object.defineProperty String::, "IsEmpty", {
+	'get': --->
+		<- this.length is 0		
+}
+
+Object.defineProperty String::, "Json", {
+	'get': --->	
+		<- JSON.parse this	
+}
+
+Object.defineProperty String::, "HtmlEntities", {
+	'get': --->
+		<- this.replace(new RegExp('&','g'), '&amp;').replace(new RegExp('<','g'), '&lt;').replace(new RegExp('>','g'), '&gt;').replace(new RegExp('"','g'), '&quot;').replace(new RegExp("'",'g'), '&\#39;')
+}
+
+Object.defineProperty String::, "EscapeHTML", {
+	'get': --->
+		<- this.replace(new RegExp('&','g'), '&amp;').replace(new RegExp('<','g'), '&lt;').replace(new RegExp('>','g'), '&gt;').replace(new RegExp('"','g'), '&quot;').replace(new RegExp("'",'g'), '&\#39;')
+}
+
+Object.defineProperty String::, "UnescapeHTML", {
+	'get': --->
+		<- this.replace(new RegExp('&lt;','g'),'<').replace(new RegExp('&gt;','g'),'>').replace(new RegExp('&amp;','g'),'&').replace(new RegExp('&quot;','g'),'"').replace(new RegExp('&\#39;','g'),'\'')
+}
+
+Object.defineProperty String::, "ToInt", {
+	'get': --->
+		<- parseInt this
+}
+
+Object.defineProperty String::, "ToBase64", {
+	'get': --->	
+		<- Buffer.from(this.toString()).toString('base64')
+}
+
+Object.defineProperty String::, "FromBase64", {
+	'get': --->	
+		<- Buffer.from(this.toString(),'base64').toString()  
+}
+
+Object.defineProperty String::, "EscapedBase64Url", {
+	'get': --->	
+		<- this.toString().replace(new RegExp('\\+','g'), '-').replace(new RegExp('\\/','g'), '_').replace(new RegExp('=','g'), '')
+}
+
+Object.defineProperty String::, "UnescapedBase64Url", {
+	'get': --->	
+		<- (this.toString() + (new Array(5 - this.toString().length % 4).join('='))).replace(new RegExp('\\-','g'), '+').replace(new RegExp('_','g'), '/')
+}
+
+Object.defineProperty String::, "PreSubStr", {
+	value: (i) --->
+		<- this.substr 0, this.length-i
+}
+
+Object.defineProperty String::, "StartsWith", {
+	value: (start) --->
+		<- this.indexOf(start) is 0
+}
+
+Object.defineProperty String::, "EndsWith", {
+	value: (end) --->
+		<- this.lastIndexOf(end) is this.length-end.length
+}
+
+Object.defineProperty String::, "JWTGetPayload", {
+	value: (secret) --->
+		parts = this.split '.'
+
+		throw 'invalid jwt token'	unless parts.length is 3
+
+		<- JSON.parse parts[1].UnescapedBase64Url.FromBase64	unless secret
+
+		if crypto.createHmac('sha512', secret).update(parts[0]+'.'+parts[1]).digest('base64').EscapedBase64Url is parts[2]
+			<- JSON.parse parts[1].UnescapedBase64Url.FromBase64
+		else
+			throw 'invalid jwt sign'
+}

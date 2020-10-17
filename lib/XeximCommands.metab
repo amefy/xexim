@@ -1,0 +1,295 @@
+import 'Modules/ModulesUtils'
+
+export class XeximCommands
+	init ->		
+		global.WARN = console.warn
+		global.ERROR = console.error
+		global.LOG = console.log
+		
+		@ createDefaultFolders()
+		@ ModulesUtils.createDefaultConfig()
+
+		#Parse command line options		
+		switch process.argv[2]
+			'install'
+				<- showUsage()		if process.argv.length < 4
+				install().catch(ERROR)
+			'list'
+				list().catch(ERROR)
+			'enable'
+				<-  showUsage()		if process.argv.length < 4
+				enable().catch(ERROR)
+			'disable'
+				<-  showUsage()		if process.argv.length < 4
+				disable().catch(ERROR)
+			'update'
+				<-  showUsage()		if process.argv.length < 4
+				update().catch(ERROR)
+			'import'
+				<-  showUsage()		if process.argv.length < 4
+				importModule().catch(ERROR)
+			'uninstall'
+				<- showUsage()		if process.argv.length < 4
+				uninstall().catch(ERROR)
+			'create'
+				<- showUsage()		if process.argv.length < 4
+				create().catch(ERROR)
+			'export'
+				<- showUsage()		if process.argv.length < 5
+				Export().catch(ERROR)
+			'exportall'
+				<- showUsage()		if process.argv.length < 4
+				exportAll().catch(ERROR)
+			'version'
+				version().catch(ERROR)
+			'publish'
+				<- showUsage()		if process.argv.length < 4
+				publish().catch(ERROR)
+			'publishall'
+				publishAll().catch(ERROR)
+			default
+				showUsage()
+		
+
+	showUsage ->
+		WARN "
+		\nUsage: \u001b[1mxexim [Command]\u001b[0m
+		\n
+		\nwhere [Command] can be:
+		\n	\u001b[1minstall\u001b[0m {Name}|{Local File Module} [{Version}][, {Name}|{Local File Module} [{Version}][...]]:
+		\n		To install a xexim module; 
+		\n			- use {Name} to install from repository
+		\n			- use {Local File Module} to install from local disk
+		\n			- {Version} specific module version
+		\n	\u001b[1muninstall\u001b[0m {Name} : to uninstall a module, this delete all of module data!
+		\n	\u001b[1mlist\u001b[0m [enabled|disabled|installed|all]: to show modules;
+		\n		- use enabled to show installed and enabled modules
+		\n		- use disabled to show installed and disabled modules
+		\n		- use installed to show installed modules. Default option
+		\n		- use all to show all modules
+		\n	\u001b[1menable\u001b[0m {Name} : to enable installed module
+		\n	\u001b[1mdisable\u001b[0m {Name} : to disable installed module
+		\n	\u001b[1mupdate\u001b[0m {Name}|{Local File Module} [{Version}]: 
+		\n		To update installed module;
+		\n			- use {Name} to update from repository
+		\n			- use {Local File Module} to update from local disk
+		\n			- {Version} specific module version
+		\n	\u001b[1mimport\u001b[0m {Name}: to import module from modules folder
+		\n	\u001b[1mcreate\u001b[0m {Name} : to create and install a module skeleton
+		\n	\u001b[1mexport\u001b[0m {Name} {OutFile} : to export a installed module as package for install in other xexim
+		\n	\u001b[1mexportall\u001b[0m {Folder} : to export all installed modules into a folder
+		\n	\u001b[1mpublish\u001b[0m {Name}|{Local File Module} : to publish a module to repository
+		\n	\u001b[1mpublishall\u001b[0m : to publish all installed modules to repository
+		\n	\u001b[1mversion\u001b[0m : to show xexim version
+		\n
+		\n
+		\nexample:
+		\n	xexim	 					--> start normal service
+		\n	xexim install fs 1.0				--> install fs v1.0 module from repository
+		\n	xexim install fs,data				--> install fs and data modules from repository
+		\n	xexim install /root/pages.xexim			--> install pages module from local disk
+		\n	xexim list 					--> show installed modules
+		\n	xexim disable pages				--> disable pages			
+		\n	xexim create MyModule				--> create a empty module
+		\n	xexim export MyModule MyModule.xexim		--> create a package from your module	
+		\n	xexim publish MyModule.xexim			--> publish a exported module to repository		
+		\n	xexim import fs 				--> setup fs module from modules folder
+		"
+
+	createDefaultFolders ->
+		@ ModulesUtils.createFolder 'config'
+		@ ModulesUtils.createFolder 'tmp'
+		@ ModulesUtils.createFolder 'tmp/trash'
+		@ ModulesUtils.createFolder 'data'
+		@ ModulesUtils.createFolder 'modules'
+
+	fillLine (content,size) ->	
+		res = ''
+		if content.length < size
+			for i in content.length..<size
+				res += ' '
+
+		<- res
+
+
+	list ->
+		modules = @ ModulesUtils.list()
+
+		if modules.length is 0			
+			LOG 'No modules'			
+		else
+			for pack in modules
+				name = '#pack.title  (#pack.name )'
+				LOG  name + fillLine(name,60) + pack.version + fillLine(pack.version,10) + (pack.enabled ? 'enabled' : 'disabled')
+
+
+		if process.send
+			process.send {
+				done: yes
+				op: 'list'
+				data: modules
+			}
+
+	create ->
+		name = @ ModulesUtils.create process.argv[3]
+		
+		LOG name+' created'
+
+		if process.send
+			process.send {done: yes, op: 'create', name: name}
+
+	enable ->
+		name = @ ModulesUtils.enable process.argv[3]
+
+		LOG '#name  enabled'
+
+		if process.send
+			process.send {done: yes, op: 'enable', name: name}
+
+	disable ->
+		name = @ ModulesUtils.disable process.argv[3]
+
+		LOG '#name  disabled'
+
+		if process.send
+			process.send {done: yes, op: 'disable', name: name}
+
+	Export ->
+		name = @ ModulesUtils.Export process.argv[3], process.argv[4]
+
+		LOG 'exported to #name '
+
+		if process.send
+			process.send {done: yes, op: 'export', name: name}
+
+	exportAll ->
+		modules = @ ModulesUtils.exportAll process.argv[3]
+
+		LOG 'exported #modules.length  modules'
+
+		if process.send
+			process.send {done: yes, op: 'exportall', name: modules}
+
+
+	install ->
+		modulesToInstall = []
+
+		i = 3;
+		while process.argv.length >= (i+1)
+			a1 = process.argv[i]
+			a2 = process.argv[i+1]
+			a3 = process.argv[i+2]
+				
+			if a1[a1.length-1] is ','
+				modulesToInstall.push [a1.substr(0,a1.length-1),null,no]
+				i++
+			else a2? and a2[a2.length-1] is ','
+				version = (a2 is 'skipExt,')? null : a2.substr(0,a2.length-1)
+				skipExt = a2 is 'skipExt,'
+
+				modulesToInstall.push [a1,version,skipExt]
+
+				i += 2
+			else a3? and a3[a3.length-1] is ','
+				skipExt = a3 is 'skipExt,'
+
+				modulesToInstall.push [a1,a2,skipExt]
+
+				i += 3
+			else
+				version = (a2 is 'skipExt')? null : a2
+				skipExt = (a2 is 'skipExt' or a3 is 'skipExt')
+
+				modulesToInstall.push [a1,version,skipExt]
+				break
+
+		packs = {packs:[]}
+
+		for mod in modulesToInstall
+			pack = @ ModulesUtils.install mod[0], mod[1], mod[2]
+
+			if pack.lastVersion?
+				LOG 'module #pack.title  #pack.lastVersion  updated to #pack.version '
+				pack.op = 'update'
+			else
+				LOG 'module #pack.title  #pack.version  installed'
+				pack.op = 'install'
+
+			packs.packs.push pack
+
+		packs.done = yes		
+
+		if process.send
+			process.send packs
+
+	uninstall ->
+		name = @ ModulesUtils.uninstall process.argv[3]
+
+		LOG 'module #name  uninstalled'
+
+		if process.send
+			process.send {done: yes,op: 'uninstall', name: name}
+
+	update ->
+		version = (process.argv[4] is 'skipExt')? null : process.argv[4]
+		skipExt = (process.argv[4] is 'skipExt' or process.argv[5] is 'skipExt')
+		pack = @ ModulesUtils.update process.argv[3], version, skipExt
+
+		LOG 'module #pack.title  #pack.lastVersion  updated to #pack.version '
+		pack.op = 'update'
+		pack.done = yes
+
+		if process.send
+			process.send pack
+
+
+	importModule ->
+		skipExt = (process.argv[4] is 'skipExt' or process.argv[5] is 'skipExt')
+		pack = @ ModulesUtils.importModule process.argv[3], skipExt
+
+		LOG 'module #pack.title  #pack.version  imported'
+		pack.op = 'import'
+		pack.done = yes
+
+		if process.send
+			process.send pack
+
+
+	version ->
+		if process.argv[3] is 'all'
+			ver = (@ ModulesUtils.importFile "package").default
+
+			LOG ver
+
+			if process.send
+				process.send {done: yes, op: 'version', data: ver}
+		else
+			ver = @ ModulesUtils.version()
+
+			LOG 'Xexim #ver '
+
+			if process.send
+				process.send {done: yes, op: 'version', name: ver}
+
+	publish ->
+		pack = @ ModulesUtils.publish process.argv[3]
+
+		LOG 'module #pack.title  #pack.version  published'
+
+		pack.done = yes
+		pack.op = 'publish'	
+
+		if process.send
+			process.send pack
+
+	publishAll ->
+		modules = @ ModulesUtils.publishAll()
+
+		LOG 'published #modules.length  modules'
+
+		if process.send
+			process.send {done: yes, op: 'publishall', name: modules}
+
+
+
+export @ new XeximCommands

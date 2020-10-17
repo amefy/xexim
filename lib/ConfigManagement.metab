@@ -1,0 +1,64 @@
+fs = require 'fs'
+cluster = require 'cluster'
+
+import 'IPC'
+import 'DataUtil'
+import 'Modules/ModulesUtils'
+
+export class ConfigManagement
+	config
+	mainConfig
+
+	init ->			
+		if cluster.isMaster
+			VOLVER_a_ACTIVAR=2
+			#IPC.on 'Config', (e) ->
+			#	OnMessageFromWorker e
+
+	loadMainConfig ->	
+		@ ModulesUtils.createDefaultConfig()
+
+		import '../config/xexim'
+
+		unless xexim.instanceId 		# add instanceId
+			xexim.instanceId = ModulesUtils.generateInstanceId()
+
+			c = @ DataUtil.readTextFile 'config/xexim.mson'
+			@ DataUtil.writeTextFile 'config/xexim.mson', c.replace '\nlog:', '\ninstanceId: "#xexim.instanceId "\nlog:'
+
+		mainConfig = xexim		
+		rootDir = global.Config.rootDir
+		config = clone mainConfig		
+		config.rootDir = rootDir	
+
+	updateMainConfig (data) ->
+		mainConfig.Merge data
+		config.Load mainConfig
+
+	updateConfig (data) -->
+		#if cluster.isMaster
+		config.MergeObject data
+		###	IPC.SendToAllWorkers 'Config', ['UpdateConfigFromMaster',Config]
+		else
+			IPC.RequestToMaster 'Config', ['UpdateConfig',Data], cb, ce
+		###
+		cb()
+
+
+	onMessageFromWorker (e) ->
+		switch e.data.message[0]
+			case 'updateConfig'
+				updateConfig e.data.message[1], e.data.cbResponse, e.data.ceResponse
+			case 'getConfig'
+				e.data.cbResponse config
+	
+	clone (obj) ->		
+		res = {}
+
+		for val,k in obj
+			res[k] = val
+
+		<- res
+
+
+export default new ConfigManagement

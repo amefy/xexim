@@ -1,0 +1,266 @@
+fs = require 'fs'
+path = require 'path'
+
+export class DataUtil
+
+	static mkdirRecursive (dir) -->
+		fs.stat Config.rootDir+dir, (err,stats) ->		
+			if err or not stats.isDirectory()
+				fs.mkdir Config.rootDir+dir, (err) ->					
+					if err								
+						if err.code is 'ENOENT'
+							mkdirRecursive(path.dirname(dir)).then( ->
+								mkdirRecursive(dir).then(cb).catch(ce)
+							).catch ce							
+						else
+							RetError ce, err
+					else						
+						cb()
+			else				
+				cb()
+
+	static folderExist (dir) -->
+		fs.stat Config.rootDir+dir, (err,stats) ->
+			if err
+				cb no
+			else stats.isDirectory()
+				cb yes
+			else
+				cb no
+
+	static fileExist (dir) -->
+		fs.stat Config.rootDir+dir, (err,stats) ->
+			if err
+				cb no
+			else stats.isFile()
+				cb yes
+			else
+				cb no
+
+	static stat (dir) -->
+		fs.stat Config.rootDir+dir, (err,stats) ->			
+			<- RetError ce,"Fail to read metadata file [#dir ]: #err ",'FAIL_METADATA_FILE' 	if err
+			cb stats
+
+	static canRead (dir) -->
+		fs.access Config.rootDir+dir, fs.R_OK, (err) ->
+			unless err
+				cb yes
+			else
+				cb no
+
+	static getFiles (dir) -->
+		fs.readdir Config.rootDir+dir, (err,files) ->
+			<- RetError ce,"Fail read folder files [#dir ]: #err ",'FAIL_READ_FOLDER'	if err
+
+			res = []
+
+			promises = []
+			for value in files
+				promises.push ((val) -> 
+					stats = @ stat dir+'/'+val
+
+					if stats.isFile()
+						res.push(
+							size: stats.size
+							creationDate: stats.birthtime
+							name: val
+						)
+				)(value)
+
+			Promise.all(promises).then(->
+				cb res
+			).catch(ce)
+
+	static getFolders (dir) -->
+		fs.readdir Config.rootDir+dir, (err,files) ->
+			<- RetError ce,"Fail read folder files [#dir ]: #err ",'NO_READ_FOLDER' 	if err
+
+			res = []
+
+			promises = []
+			for value in files
+				promises.push ((val) -> 
+					stats = @ stat dir+'/'+val
+
+					if stats.isDirectory()
+						res.push(
+							size: stats.size
+							creationDate: stats.birthtime
+							name: val
+						)
+				)(value)
+
+			Promise.all(promises).then(->
+				cb res
+			).catch(ce)
+
+	static removeFolderContent (folder) -->
+		TRACE "Removing #folder ..."
+
+		#add slash		
+		folder +='/' 	if isString(folder) and not folder.IsEmpty and folder.Last isnt '/'
+		
+		#List files
+		fs.readdir Config.rootDir+folder, (err, files) ->		
+			<- RetError ce,"Cannot read folder [#folder ]: #err ",'FAIL_READ_FOLDER'				if err?				
+			
+			if files.isEmpty		#empty folder
+				cb()
+			else
+				promises = []
+				for value in files					
+					promises.push ((file) -> 
+						stats = @ stat file
+
+						TRACE 'removing '+file
+						if stats.isFile()
+							
+							@ removeFile file								
+						else stats.isDirectory()
+							@ removeEntireFolder file
+						else
+							ThrowE "Cannot remove [#file ]: it has items diferent of files/folders", 'BAD_FILE_TYPE_ON_REMOVE'
+					)(folder+value)
+
+				Promise.all(promises).then(->
+					cb()
+				).catch(ce)
+
+	static removeEntireFolder (folder) ->
+		@ removeFolderContent folder
+		@ removeFolder folder
+
+	static removeFolder (folder) -->
+		fs.rmdir Config.rootDir+folder, (err) ->
+			<- RetError ce,"Fail remove [#folder ]: #err ",'FAIL_REMOVE_FOLDER' 	if err
+			
+			cb()
+
+	static removeFile (file) -->
+		fs.unlink Config.rootDir+file, (err) ->
+			<- RetError ce,"Fail remove [#file ]: #err ",'FAILT_REMOVE_FILE' 	if err
+			
+			cb()
+
+	static readFileByLines (file, cbline) -->
+		F = fs.createReadStream(Config.rootDir+file)
+
+		lastLine = ''
+
+		F.on 'data', (buf) ->
+			read = buf.toString()
+
+			lines = read.split(/\r\n|\r|\n/g)
+
+			lastLine += lines[0]
+
+			if lines.length > 1				
+				cbline lastLine
+				for i in 1..lines.length-2
+					cbline lines[i]
+				lastLine = lines.last
+		F.on 'end', ->
+			if lastLine isnt ''
+				cbline lastLine
+			cb()
+
+	static readTextFile (file) -->
+		fs.readFile Config.rootDir+file, 'utf8', (e, data) ->
+			<- RetError ce,"Cannot read file [#file ]: #e ",'FAIL_READ_FILE' 	if e			
+
+			cb data
+
+	static readBinFile (file) -->
+		fs.readFile Config.rootDir+file, (e, data) ->
+			<- RetError ce,"Cannot read file [#file ]: #e ",'FAIL_READ_FILE' 	if e			
+
+			cb data
+
+	static open (file, flags, mode=438) -->
+		fs.open Config.rootDir+file, flags, mode, (e, data) ->
+			<- RetError ce, "Cannot open file [#file ]: #e ",'FAIL_OPEN_FILE' 	if e
+
+			cb data
+
+	static read (fd, buffer, offset, length, position) -->
+		fs.read fd, buffer, offset, length, position, (e,bytesRead,buffer) ->
+			<- RetError ce, "Cannot read file [#fd ]: #e ",'FAIL_READ_FILE' 	if e
+
+			cb bytesRead
+
+	static seek (fd,position) ->
+		@ fs.read fd, Buffer.alloc(1), 0, 0, position
+
+	static close (fd) -->
+		fs.close fd, (e) ->
+			<- RetError ce, "Cannot close file [#fd ]: #e ",'FAIL_CLOSE_FILE' 	if e
+
+			cb()
+
+	static writeTextFile (file,data) -->		
+		fs.writeFile Config.rootDir+file, data, (e) ->
+			<- RetError ce,"Cannot write file [#file ]: #e ",'FAIL_WRITE_FILE' 	if e
+
+			cb()
+
+	static writeBinFile (file,data) -->		
+		fs.writeFile Config.rootDir+file, data, (e) ->
+			<- RetError ce,"Cannot write file [#file ]: #e ",'FAIL_WRITE_FILE' 	if e
+
+			cb()
+
+
+	static appendTextFile (file,data) -->		
+		fs.appendFile Config.rootDir+file, data, (e) ->
+			<- RetError ce,"Cannot write file [#file ]: #e ",'FAIL_APPEND_FILE' 	if e
+
+			cb()
+
+	static pipeFileToStream (file,outStream,range) -->
+		if range
+			reader = fs.createReadStream Config.rootDir+file, {start: range[0], end: range[1]}
+		else
+			reader = fs.createReadStream Config.rootDir+file							
+
+		error = no
+		reader.on 'error', (e) ->
+			error = yes
+			RetError ce,e
+
+		reader.on 'close', (E) ->
+			cb() 	unless error
+
+		reader.pipe outStream
+
+	static pipeStreamToStream (inStream,outStream) -->
+		error = no
+		inStream.on 'error', (e) ->
+			error = yes
+			RetError ce,e
+
+		inStream.on 'close', (E) ->
+			cb() 	unless error
+
+		inStream.pipe outStream
+
+	static createWriteStream (file,options) -->		
+		cb fs.createWriteStream Config.rootDir+file, options
+
+	static createReadStream (file,options) -->		
+		cb fs.createReadStream Config.rootDir+file, options
+
+	static renameFile (file,newFile) -->
+		fs.rename file, newFile, (e) ->
+			<- RetError ce,"Cannot rename file [#file ] to [#newFile ] : #e ",'FAIL_RENAME_FILE' 	if e
+
+			cb()
+
+	static copyFile (fromFile, toFile, overwrite=yes) -->
+		fs.copyFile fromFile, toFile, (overwrite? 0 : fs.constants.COPYFILE_EXCL),(e) ->
+			<- RetError ce,"Cannot copy file [#fromFile ] to [#toFile ] : #e ",'FAIL_COPY_FILE' 	if e
+
+			cb()
+
+
+

@@ -1,0 +1,138 @@
+crypto = require('crypto')
+
+Object.defineProperty Object::, "LoadToThis", {
+	value: (data) --->
+		if data?
+			for ,key in data
+				this[key] = data[key] if this[key] isnt undefined or not this[key]?
+		<- this
+}
+
+Object.defineProperty Object::, "ConcatObject", {
+	value: (a) --->
+		r = {}
+		for ,k in this
+			r[k] = this[k]
+		for ,k in a
+			r[k] = a[k]
+		<- r
+}
+
+Object.defineProperty Object::, "ToHTMLTable", {
+	value: --->
+		res = "Empty Object"
+		unless IsEmpty
+			res = "<table style=\"border: 1px solid;\"><thead><tr>"
+			for ,i in this
+				res += "<td style=\"border: 1px solid;\">" + i + "</td>"
+			res += "</tr></thead><tbody><tr>"
+		
+			for ,i in this
+				if this[i] and typeof this[i] is "object"
+					res += "<td>#this[i].ToHTML() </td>"
+				else
+					res += "<td>#this[i] </td>"
+			res += "</tr></tbody></table>"
+		<- res
+}
+
+Object.defineProperty Object::, "OLength", {
+	'get': --->
+		<- Object.keys(this).length
+}
+
+Object.defineProperty Object::, "IsEmpty", {
+	'get': --->
+		for v,i in this
+			<- no
+		<- yes
+}
+
+Object.defineProperty Object::, "Json", {
+	'get': --->
+		<- JSON.stringify this
+	'set': (V)--->
+		try
+			data = JSON.parse V
+		catch e
+			ERROR "Error parsing json: "+V
+			
+		for v,k in data
+			this[k] = v
+}
+###
+Object.defineProperty Object::, "CallBack", {
+	value: (method, PL1, PL2, PL3) --->
+		(P1, P2, P3) ->
+			<- if this.destructed
+			
+			ThrowE "CallBack error: (#{ method }) is not an method"  unless typeof this[method] is "function"
+			unless typeof PL1 is "undefined"
+				unless typeof PL2 is "undefined"
+					unless typeof PL3 is "undefined"
+						<- this[method] PL1, PL2, PL3, P1, P2, P3
+					else
+						<- this[method] PL1, PL2, P1, P2, P3
+				else
+					<- this[method] PL1, P1, P2, P3
+			else
+				<- this[method] P1, P2, P3
+}###
+
+Object.defineProperty Object::, 'PushUnique', {
+	value: (e,val) --->
+		this[e]=val 	unless e in this
+		<- this
+}
+
+Object.defineProperty Object::, 'MergeObject', {
+	value: (obj) --->
+		for v,k in obj
+			if isArray(this[k]) and isArray(v)
+				this[k].Merge v
+			else typeof this[k] is 'object' and typeof v is 'object'
+				this[k].MergeObject v
+			else
+				this[k]=v
+		
+		<- this
+}
+
+Object.defineProperty Object::, 'ClassName', {
+	'get': () --->
+		<- null 	if this is null
+
+		<- this.constructor.name
+}
+
+Object.defineProperty Object::, "Prototype", {
+	'get': --->
+		<- this.constructor
+}
+
+Object.defineProperty Object::, "JoinObject", {
+	value: (separator) --->
+		R = ''
+		for v in this
+			if R is '' or not separator?
+				R+=v
+			else
+				R+=separator+v
+		<- R		
+}
+
+Object.defineProperty Object::, "CloneObject", {
+	'get': --->
+		newObj = {}
+		for v,k in this
+			newObj[k] = v
+		<- newObj
+}
+
+Object.defineProperty Object::, "JWTGetToken", {
+	value: (secret) --->
+		toSing = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.' + Buffer.from(JSON.stringify(this)).toString('base64').EscapedBase64Url
+
+		<- toSing+'.'+crypto.createHmac('sha512', secret).update(toSing).digest('base64').EscapedBase64Url
+		
+}
